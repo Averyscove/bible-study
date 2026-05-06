@@ -2236,7 +2236,7 @@ function renderAuthScreen() {
         ${ornLine()}
         <h2>${escape(title)}</h2>
         <p class="lead">${escape(lead)}</p>
-        <form class="auth-form" data-act="auth-submit">
+        <form class="auth-form" id="auth-form">
           <label for="auth-email">Email</label>
           <input id="auth-email" type="email" autocomplete="email" required value="${emailVal}" autocapitalize="off" autocorrect="off" spellcheck="false">
           ${isForgot ? '' : `
@@ -3027,17 +3027,6 @@ function onClick(e) {
     render();
     return;
   }
-  if (act === 'auth-submit') {
-    e.preventDefault();
-    const emailEl = document.getElementById('auth-email');
-    const pwEl = document.getElementById('auth-password');
-    const email = emailEl ? emailEl.value : '';
-    const password = pwEl ? pwEl.value : '';
-    window._authEmail = email;
-    if (authMode === 'signup') return handleSignUp(email, password);
-    if (authMode === 'forgot') return handleSendReset(email);
-    return handleSignIn(email, password);
-  }
   if (act === 'skip-auth') {
     skipAuth = true;
     try { localStorage.setItem('biblestudy_skipauth', '1'); } catch (e) {}
@@ -3105,7 +3094,7 @@ function onChange(e) {
 }
 
 function onSubmit(e) {
-  if (e.target.matches('form[data-act="auth-submit"]')) {
+  if (e.target.id === 'auth-form') {
     e.preventDefault();
     const emailEl = document.getElementById('auth-email');
     const pwEl = document.getElementById('auth-password');
