@@ -1822,15 +1822,48 @@ function persist({ skipRemote = false } = {}) {
   }, 250);
   if (!skipRemote && currentUser && initialSyncDone) scheduleRemoteSave();
 }
-function scheduleRemoteSave() {
+function scheduleRemoteSave({ immediate = false } = {}) {
   clearTimeout(remoteSaveTimer);
-  remoteSaveTimer = setTimeout(async () => {
-    if (!currentUser || !window.bsDb?.available) return;
-    setSync('syncing');
-    const result = await window.bsDb.saveUser(currentUser.uid, snapshotForSave());
-    if (result?.error) setSync('error');
-    else setSync('synced');
-  }, 1500);
+  const delay = immediate ? 0 : 1200;
+  remoteSaveTimer = setTimeout(() => doRemoteSave(), delay);
+}
+async function doRemoteSave() {
+  if (!currentUser || !window.bsDb?.available) return;
+  setSync('syncing');
+  const result = await window.bsDb.saveUser(currentUser.uid, snapshotForSave());
+  if (result?.error) setSync('error');
+  else { setSync('synced'); state.lastSyncedAt = Date.now(); }
+}
+async function flushRemoteSave() {
+  // Cancel pending debounce and save right now
+  if (remoteSaveTimer) { clearTimeout(remoteSaveTimer); remoteSaveTimer = null; await doRemoteSave(); }
+}
+async function manualSyncNow() {
+  if (!currentUser || !window.bsDb?.available) {
+    toast('Sign in to sync across devices');
+    return;
+  }
+  setSync('syncing');
+  // First push any pending local changes
+  await flushRemoteSave();
+  // Then pull remote and reconcile (in case another device wrote newer data)
+  const remote = await window.bsDb.loadUser(currentUser.uid);
+  if (remote && (remote.updatedAt || 0) > (state.updatedAt || 0)) {
+    const localVoice = state.settings?.voice || '';
+    Object.assign(state, defaultState(), remote);
+    if (!state.settings) state.settings = defaultState().settings;
+    state.settings.voice = localVoice;
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+    setSync('synced');
+    state.lastSyncedAt = Date.now();
+    render();
+    toast('Synced — pulled latest from cloud ✓');
+    return;
+  }
+  setSync('synced');
+  state.lastSyncedAt = Date.now();
+  render();
+  toast('Synced — your device is up to date ✓');
 }
 function snapshotForSave() {
   // Don't sync the local-only audio voice (different devices have different voices)
@@ -1983,6 +2016,8 @@ function markDone(id, done = true) {
   }
   else delete state.progress[id];
   persist();
+  // Important state changes — push to cloud immediately, don't wait for debounce
+  if (currentUser && initialSyncDone) scheduleRemoteSave({ immediate: true });
 }
 function phaseProgress(p) {
   const total = p.items.length;
@@ -2024,10 +2059,45 @@ const readingTimer = {
   }
 };
 window.addEventListener('beforeunload', () => readingTimer.stop());
+
+// Sync hooks: flush pending writes on hide; pull from cloud on focus
+let lastFocusPullAt = 0;
+async function onAppHide() {
+  readingTimer.stop();
+  // Flush any pending remote save before the OS suspends us
+  if (currentUser && initialSyncDone) {
+    try { await flushRemoteSave(); } catch (e) {}
+  }
+}
+async function onAppShow() {
+  if (view.name === 'chapter' && view.chapterId) readingTimer.start(view.chapterId);
+  // Pull from cloud — but throttle (don't pull more than once every 5s)
+  if (!currentUser || !window.bsDb?.available || !initialSyncDone) return;
+  if (Date.now() - lastFocusPullAt < 5000) return;
+  lastFocusPullAt = Date.now();
+  try {
+    const remote = await window.bsDb.loadUser(currentUser.uid);
+    if (remote && (remote.updatedAt || 0) > (state.updatedAt || 0)) {
+      const localVoice = state.settings?.voice || '';
+      Object.assign(state, defaultState(), remote);
+      if (!state.settings) state.settings = defaultState().settings;
+      state.settings.voice = localVoice;
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+      setSync('synced');
+      state.lastSyncedAt = Date.now();
+      render();
+      toast('Synced from another device ✓');
+    } else {
+      setSync('synced');
+    }
+  } catch (e) {}
+}
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) readingTimer.stop();
-  else if (view.name === 'chapter' && view.chapterId) readingTimer.start(view.chapterId);
+  if (document.hidden) onAppHide();
+  else onAppShow();
 });
+window.addEventListener('pagehide', onAppHide);
+window.addEventListener('pageshow', onAppShow);
 
 /* =================== Toast =================== */
 let toastTimer = null;
@@ -2787,10 +2857,12 @@ function renderSettings() {
           <div class="account-status">
             ${syncStatus === 'syncing' ? 'Syncing…'
             : syncStatus === 'synced' ? '✓ Synced across devices'
-            : syncStatus === 'error' ? 'Sync error — will retry'
+            : syncStatus === 'error' ? 'Sync error — try Sync now'
             : 'Signed in'}
+            ${state.lastSyncedAt ? ` <span style="color:var(--ink-faint);">· last sync ${formatTimeAgo(state.lastSyncedAt)}</span>` : ''}
           </div>
           <div class="account-actions">
+            <button class="audio-btn" data-act="sync-now">${iconRefresh} Sync now</button>
             <button class="mv-btn" data-act="sign-out">Sign out</button>
           </div>
         ` : window.bsAuth?.available ? `
@@ -3043,6 +3115,20 @@ function onClick(e) {
     return;
   }
   if (act === 'sign-out') return handleSignOut();
+  if (act === 'sync-now') return manualSyncNow();
+}
+
+function formatTimeAgo(ts) {
+  if (!ts) return '';
+  const sec = Math.round((Date.now() - ts) / 1000);
+  if (sec < 5) return 'just now';
+  if (sec < 60) return `${sec}s ago`;
+  const min = Math.round(sec / 60);
+  if (min < 60) return `${min} min ago`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return `${hr} hr ago`;
+  const d = Math.round(hr / 24);
+  return `${d}d ago`;
 }
 
 function toggleBookmark(verseEl) {
@@ -3209,6 +3295,7 @@ const iconBookmark = '<svg width="11" height="11" viewBox="0 0 24 24" fill="curr
 const iconQuill = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>';
 const iconFlame = '<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>';
 const iconScale = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M5 7h14"/><path d="M5 7l-3 6a4 4 0 0 0 6 0z"/><path d="M19 7l-3 6a4 4 0 0 0 6 0z"/><path d="M8 21h8"/></svg>';
+const iconRefresh = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>';
 
 /* =================== Util =================== */
 function escape(s) {

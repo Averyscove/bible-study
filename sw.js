@@ -3,7 +3,7 @@
  * Bump CACHE_VERSION each time index.html or sw.js changes meaningfully.
  */
 
-const CACHE_VERSION = 'v5-2026-05-06-auth-fix1';
+const CACHE_VERSION = 'v6-2026-05-06-sync-reliability';
 const CACHE_NAME = `bible-study-${CACHE_VERSION}`;
 const PRECACHE_URLS = ['./', './index.html', './sw.js'];
 
