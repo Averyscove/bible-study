@@ -1257,6 +1257,39 @@
     .scripture .v:active { background: var(--walnut-soft); }
   }
 
+  /* Update banner (when service worker has a new version) */
+  .update-banner {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%) translateY(120%);
+    bottom: calc(20px + env(safe-area-inset-bottom));
+    background: var(--walnut);
+    color: #fbf4e3;
+    border-radius: 999px;
+    padding: 10px 8px 10px 18px;
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 600;
+    z-index: 250;
+    box-shadow: var(--paper-shadow-lg);
+    display: flex; align-items: center; gap: 10px;
+    transition: transform .35s cubic-bezier(.4,0,.2,1);
+  }
+  :root.dark .update-banner { color: #15110c; }
+  @media (prefers-color-scheme: dark) { :root.auto-theme .update-banner { color: #15110c; } }
+  .update-banner.show { transform: translateX(-50%) translateY(0); }
+  .update-banner button {
+    background: rgba(255,255,255,0.18);
+    border: 0; color: inherit;
+    padding: 7px 14px;
+    border-radius: 999px;
+    font: inherit; font-weight: 700;
+    cursor: pointer;
+  }
+  :root.dark .update-banner button { background: rgba(0,0,0,0.18); }
+  @media (prefers-color-scheme: dark) { :root.auto-theme .update-banner button { background: rgba(0,0,0,0.18); } }
+  .update-banner button:hover { background: rgba(255,255,255,0.28); }
+
   /* ================ Commentary block ================ */
   .commentary {
     margin: 22px 18px 8px;
@@ -2691,10 +2724,58 @@ function escape(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 }
 
+/* =================== Service worker — guaranteed offline =================== */
+function installServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  // Skip when opened locally (file://) since service workers require http(s)
+  if (location.protocol !== 'http:' && location.protocol !== 'https:') return;
+
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (refreshing) return;
+    refreshing = true;
+    window.location.reload();
+  });
+
+  navigator.serviceWorker.register('./sw.js').then((reg) => {
+    // Periodic background update check (every hour while open)
+    setInterval(() => { try { reg.update(); } catch (e) {} }, 60 * 60 * 1000);
+
+    // If a worker is already waiting on first load, surface the banner
+    if (reg.waiting && navigator.serviceWorker.controller) {
+      showUpdateBanner(reg.waiting);
+    }
+
+    reg.addEventListener('updatefound', () => {
+      const w = reg.installing;
+      if (!w) return;
+      w.addEventListener('statechange', () => {
+        if (w.state === 'installed' && navigator.serviceWorker.controller) {
+          showUpdateBanner(w);
+        }
+      });
+    });
+  }).catch(() => {/* fail silently — app still works without SW */});
+}
+
+function showUpdateBanner(worker) {
+  if (document.querySelector('.update-banner')) return;
+  const banner = document.createElement('div');
+  banner.className = 'update-banner';
+  banner.innerHTML = '<span>New version available</span><button>Refresh</button>';
+  banner.querySelector('button').addEventListener('click', () => {
+    worker.postMessage('skipWaiting');
+  });
+  document.body.appendChild(banner);
+  // animate in
+  requestAnimationFrame(() => banner.classList.add('show'));
+}
+
 /* =================== Init =================== */
 tts.loadVoices();
 view = { name: 'welcome' };
 render();
+installServiceWorker();
 
 window.addEventListener('beforeunload', () => {
   if (saveTimer) { clearTimeout(saveTimer); localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
