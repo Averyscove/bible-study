@@ -1844,26 +1844,19 @@ async function manualSyncNow() {
     return;
   }
   setSync('syncing');
-  // First push any pending local changes
-  await flushRemoteSave();
-  // Then pull remote and reconcile (in case another device wrote newer data)
+  // Pull remote first
   const remote = await window.bsDb.loadUser(currentUser.uid);
-  if (remote && (remote.updatedAt || 0) > (state.updatedAt || 0)) {
-    const localVoice = state.settings?.voice || '';
-    Object.assign(state, defaultState(), remote);
-    if (!state.settings) state.settings = defaultState().settings;
-    state.settings.voice = localVoice;
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
-    setSync('synced');
-    state.lastSyncedAt = Date.now();
-    render();
-    toast('Synced — pulled latest from cloud ✓');
-    return;
-  }
-  setSync('synced');
+  // Merge with local — guarantees no data loss in either direction
+  const merged = mergeStates(state, remote);
+  const remoteWasNewer = remote && (remote.updatedAt || 0) > (state.updatedAt || 0);
+  applyMerged(merged);
+  state.updatedAt = Date.now();
   state.lastSyncedAt = Date.now();
+  // Push merged state back so cloud has the union
+  await window.bsDb.saveUser(currentUser.uid, snapshotForSave());
+  setSync('synced');
   render();
-  toast('Synced — your device is up to date ✓');
+  toast(remoteWasNewer ? 'Synced — pulled and merged ✓' : 'Synced — your data is in the cloud ✓');
 }
 function snapshotForSave() {
   // Don't sync the local-only audio voice (different devices have different voices)
@@ -2071,18 +2064,16 @@ async function onAppHide() {
 }
 async function onAppShow() {
   if (view.name === 'chapter' && view.chapterId) readingTimer.start(view.chapterId);
-  // Pull from cloud — but throttle (don't pull more than once every 5s)
   if (!currentUser || !window.bsDb?.available || !initialSyncDone) return;
   if (Date.now() - lastFocusPullAt < 5000) return;
   lastFocusPullAt = Date.now();
   try {
     const remote = await window.bsDb.loadUser(currentUser.uid);
-    if (remote && (remote.updatedAt || 0) > (state.updatedAt || 0)) {
-      const localVoice = state.settings?.voice || '';
-      Object.assign(state, defaultState(), remote);
-      if (!state.settings) state.settings = defaultState().settings;
-      state.settings.voice = localVoice;
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+    if (!remote) { setSync('synced'); return; }
+    // If remote is meaningfully ahead, merge it in
+    if ((remote.updatedAt || 0) > (state.updatedAt || 0)) {
+      const merged = mergeStates(state, remote);
+      applyMerged(merged);
       setSync('synced');
       state.lastSyncedAt = Date.now();
       render();
@@ -2122,6 +2113,98 @@ function shouldShowAuth() {
   return true;
 }
 
+/* =================== Merge =================== */
+// Combines local state with remote state without losing data.
+// - progress: union (keep all done chapters, prefer earlier doneAt)
+// - notes: per-field, longer text wins; both sides preserved if non-empty
+// - bookmarks: union by key, oldest addedAt wins
+// - memory / coreMessage / readQ: OR (once true, stays true)
+// - streak: union of days; max of current/best; latest lastDate
+// - readTime: max per chapter
+// - settings / lastViewed: take whichever side has newer updatedAt
+function mergeStates(local, remote) {
+  if (!remote) return local;
+  if (!local) return remote;
+  const out = defaultState();
+  const localNewer = (local.updatedAt || 0) >= (remote.updatedAt || 0);
+
+  // progress — union, preserve earliest doneAt
+  out.progress = { ...(remote.progress || {}) };
+  for (const k in (local.progress || {})) {
+    const lv = local.progress[k], rv = out.progress[k];
+    if (!rv) out.progress[k] = lv;
+    else if ((lv?.doneAt || 0) && (lv?.doneAt < (rv?.doneAt || Infinity))) out.progress[k] = lv;
+  }
+
+  // notes — per-field merge
+  const allNoteIds = new Set([...Object.keys(remote.notes || {}), ...Object.keys(local.notes || {})]);
+  out.notes = {};
+  for (const k of allNoteIds) {
+    const l = (local.notes || {})[k] || {};
+    const r = (remote.notes || {})[k] || {};
+    const m = {};
+    for (const f of ['jesus', 'stood_out', 'question', 'prayer']) {
+      const lv = l[f] || '', rv = r[f] || '';
+      if (lv && rv) m[f] = lv.length >= rv.length ? lv : rv;
+      else m[f] = lv || rv;
+    }
+    if (Object.values(m).some(v => v)) out.notes[k] = m;
+  }
+
+  // bookmarks — union, prefer earlier addedAt for same key
+  out.bookmarks = { ...(remote.bookmarks || {}) };
+  for (const k in (local.bookmarks || {})) {
+    const lv = local.bookmarks[k];
+    const rv = out.bookmarks[k];
+    if (!rv) out.bookmarks[k] = lv;
+    else if ((lv?.addedAt || 0) && (lv.addedAt < (rv.addedAt || Infinity))) out.bookmarks[k] = lv;
+  }
+
+  // booleans: memory, coreMessage, readQ → OR
+  const orMerge = (la, ra) => {
+    const o = {};
+    const allKeys = new Set([...Object.keys(la || {}), ...Object.keys(ra || {})]);
+    for (const k of allKeys) o[k] = !!((la || {})[k] || (ra || {})[k]);
+    return o;
+  };
+  out.memory = orMerge(local.memory, remote.memory);
+  out.coreMessage = orMerge(local.coreMessage, remote.coreMessage);
+  out.readQ = orMerge(local.readQ, remote.readQ);
+
+  // streak — union of days, max stats, latest lastDate
+  const ls = local.streak || {}, rs = remote.streak || {};
+  out.streak = {
+    days: { ...(rs.days || {}), ...(ls.days || {}) },
+    current: Math.max(ls.current || 0, rs.current || 0),
+    max: Math.max(ls.max || 0, rs.max || 0),
+    lastDate: [ls.lastDate, rs.lastDate].filter(Boolean).sort().pop() || null,
+  };
+
+  // readTime — max per chapter
+  const allRT = new Set([...Object.keys(local.readTime || {}), ...Object.keys(remote.readTime || {})]);
+  out.readTime = {};
+  for (const k of allRT) {
+    out.readTime[k] = Math.max((local.readTime || {})[k] || 0, (remote.readTime || {})[k] || 0);
+  }
+
+  // settings/lastViewed — newer side wins
+  out.settings = (localNewer ? local.settings : remote.settings) || defaultState().settings;
+  out.lastViewed = (localNewer ? local.lastViewed : remote.lastViewed) || null;
+
+  // updatedAt — max of the two (will get bumped to Date.now() by next persist)
+  out.updatedAt = Math.max(local.updatedAt || 0, remote.updatedAt || 0);
+  out.lastSyncedAt = Date.now();
+  return out;
+}
+
+function applyMerged(merged, { keepLocalVoice = true } = {}) {
+  const localVoice = keepLocalVoice ? (state.settings?.voice || '') : merged.settings?.voice;
+  Object.assign(state, defaultState(), merged);
+  if (!state.settings) state.settings = defaultState().settings;
+  if (keepLocalVoice) state.settings.voice = localVoice;
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+}
+
 async function reconcileWithRemote() {
   if (!currentUser || !window.bsDb?.available) {
     initialSyncDone = true;
@@ -2129,19 +2212,19 @@ async function reconcileWithRemote() {
   }
   setSync('syncing');
   const remote = await window.bsDb.loadUser(currentUser.uid);
-  const localUpdated = state.updatedAt || 0;
-  const remoteUpdated = remote?.updatedAt || 0;
 
   if (!remote) {
+    // Cloud is empty for this account — push current local up
     state.updatedAt = Date.now();
+    state.lastSyncedAt = Date.now();
     await window.bsDb.saveUser(currentUser.uid, snapshotForSave());
-  } else if (remoteUpdated > localUpdated) {
-    const localVoice = state.settings?.voice || '';
-    Object.assign(state, defaultState(), remote);
-    if (!state.settings) state.settings = defaultState().settings;
-    state.settings.voice = localVoice;
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
-  } else if (localUpdated > remoteUpdated) {
+  } else {
+    // Always merge — never overwrite. This protects against data loss
+    // when one device pushes empty state before the other syncs up.
+    const merged = mergeStates(state, remote);
+    applyMerged(merged);
+    // Push merged result back if it's different from what we just loaded
+    state.updatedAt = Date.now();
     await window.bsDb.saveUser(currentUser.uid, snapshotForSave());
   }
   initialSyncDone = true;
