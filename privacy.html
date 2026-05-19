@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Privacy Policy — Starting with Christ</title>
+<style>
+  :root {
+    --paper: #fbf4e3;
+    --ink: #1a1410;
+    --ink-soft: #4a3a2a;
+    --ink-faint: #8a7a64;
+    --rule: rgba(26, 20, 16, 0.15);
+    --surface-2: rgba(26, 20, 16, 0.04);
+    --serif: 'Iowan Old Style', Georgia, 'Times New Roman', serif;
+    --sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #1a1410;
+      --ink: #f0e7d2;
+      --ink-soft: #c8b993;
+      --ink-faint: #88795f;
+      --rule: rgba(240, 231, 210, 0.15);
+      --surface-2: rgba(240, 231, 210, 0.04);
+    }
+  }
+  html, body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    line-height: 1.6;
+  }
+  .doc {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 40px 24px 60px;
+  }
+  .back-link {
+    display: inline-block;
+    color: var(--ink-faint);
+    text-decoration: none;
+    font-size: 14px;
+    margin-bottom: 24px;
+  }
+  .back-link:hover { color: var(--ink); }
+  h1 {
+    font-family: var(--serif);
+    font-size: 32px;
+    font-weight: 600;
+    margin: 0 0 6px;
+    color: var(--ink);
+  }
+  .lead {
+    color: var(--ink-faint);
+    font-size: 14px;
+    margin: 0 0 32px;
+    font-style: italic;
+  }
+  h2 {
+    font-family: var(--serif);
+    font-size: 20px;
+    font-weight: 600;
+    margin: 28px 0 8px;
+    color: var(--ink);
+  }
+  p, li {
+    font-size: 15.5px;
+    color: var(--ink-soft);
+  }
+  ul {
+    padding-left: 22px;
+    margin: 8px 0 12px;
+  }
+  li { margin: 4px 0; }
+  strong { color: var(--ink); }
+  code {
+    background: var(--surface-2);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 14px;
+  }
+  .meta {
+    color: var(--ink-faint);
+    font-size: 13px;
+    border-top: 1px solid var(--rule);
+    margin-top: 40px;
+    padding-top: 16px;
+  }
+</style>
+</head>
+<body>
+<div class="doc">
+  <a class="back-link" href="./">‹ Back to the app</a>
+  <h1>Privacy Policy</h1>
+  <p class="lead">Starting with Christ. Last updated: 2026-05-19.</p>
+
+  <p>This Privacy Policy explains what information we collect when you use Starting with Christ (the "App"), how we use it, and the choices you have. We try to keep this in plain English. If anything is unclear, please reach out — contact details are at the bottom.</p>
+
+  <h2>1. Who we are</h2>
+  <p>Starting with Christ is a personal Bible study app. The App is operated by the developer listed in the App Store as the "Provider" (the "we," "us," or "our" in this policy).</p>
+
+  <h2>2. What information we collect</h2>
+
+  <p><strong>Account information (optional).</strong> If you choose to create an account, we collect your email address and a password (the password is hashed and stored by Firebase Authentication; we never see it in plain text). We use these to let you sign in and to keep your devotional data in sync across your devices. You can use the App fully without an account — sign-in is only used to back up and sync your data.</p>
+
+  <p><strong>Devotional data.</strong> The App tracks the chapters you've read, the personal reflection notes you write, the verses you bookmark, your reading streak, and how long you spend on each chapter. This information is private to you. It is stored locally on your device, and — if you create an account — also synced to your account in our cloud database so it follows you across devices. No other user can read it.</p>
+
+  <p><strong>Device-only data.</strong> The App stores some preferences only on your device and never sends them to our servers — currently this is the voice you've selected for read-aloud, your preferred font size, and your light/dark mode preference.</p>
+
+  <h2>3. What information we do <em>not</em> collect</h2>
+  <ul>
+    <li>Real name.</li>
+    <li>Phone number.</li>
+    <li>Location.</li>
+    <li>Browsing history outside the App.</li>
+    <li>Contacts, photos, microphone, camera — the App does not request access to any of these.</li>
+    <li>Advertising or tracking identifiers.</li>
+    <li>Analytics or usage telemetry of any kind.</li>
+  </ul>
+
+  <h2>4. How we use your information</h2>
+  <ul>
+    <li>To let you sign in (if you choose to create an account).</li>
+    <li>To save your reading progress and notes so they sync across your devices.</li>
+    <li>To respond to support requests.</li>
+  </ul>
+  <p>We do not use your information for advertising. We do not sell or rent your information to anyone. We do not share it with third parties other than the Firebase infrastructure described below.</p>
+
+  <h2>5. Who can see your information</h2>
+  <ul>
+    <li><strong>You, and only you</strong>, can see your reading progress, notes, bookmarks, and streak. Database security rules enforce this: each account can read only its own data.</li>
+    <li><strong>We (the developer)</strong> can technically read database contents in the course of operating and supporting the App, but we do not access your private reading data unless you ask us to (for example, to help with a bug). We never read your private notes for product or marketing purposes.</li>
+  </ul>
+
+  <h2>6. Where your information is stored</h2>
+  <p>Your data is stored in Google Firebase (Authentication and Cloud Firestore), which Google operates on its global infrastructure. Firebase encrypts data in transit and at rest. We use Firebase's standard security model and never embed credentials in the App that would allow access beyond your own account.</p>
+
+  <h2>7. How long we keep your information</h2>
+  <p>We keep your account information for as long as your account exists. If you delete your account using the "Delete my account" feature in the App, we permanently remove the document containing your devotional data (<code>/users/{your-account-id}</code>) and your authentication record. This is immediate and final.</p>
+
+  <h2>8. Your rights and choices</h2>
+  <ul>
+    <li><strong>Use the App without an account:</strong> the reading plan, your reflection notes, and your bookmarks all work fully offline without any sign-in.</li>
+    <li><strong>Delete your account:</strong> Settings → Account → Delete my account. This is final and immediate.</li>
+    <li><strong>Reset all progress:</strong> Settings → Reset all progress. This clears local data and (if you're signed in) the cloud copy too.</li>
+    <li><strong>Request a copy of your data:</strong> contact us at the email below and we'll provide an export.</li>
+  </ul>
+
+  <h2>9. Children</h2>
+  <p>The App is suitable for users of all ages, but accounts (and the data sync that comes with them) are intended for users aged 13 and over. We do not knowingly collect personal information from children under 13. If you are a parent and believe your child under 13 has created an account, please contact us and we will delete it.</p>
+
+  <h2>10. International users</h2>
+  <p>The App is hosted on Google Firebase, which is operated globally. By using the App you understand that your information may be stored on servers outside your country of residence. If you are in the European Economic Area, the United Kingdom, or another region with applicable privacy laws (including the GDPR or California's CCPA), you have rights to access, correct, delete, and export your information; the in-App tools above implement most of these rights, and we will assist with any others on request.</p>
+
+  <h2>11. Changes to this policy</h2>
+  <p>We may update this policy from time to time. When we do, we'll change the "Last updated" date at the top, and if the changes are significant we'll let you know inside the App. Continued use of the App after changes go into effect means you accept the updated policy.</p>
+
+  <h2>12. Contact</h2>
+  <p>If you have questions, requests, or concerns about your data, email us at the address listed in the App Store as the developer's support contact, or reach out to the developer through the GitHub repository where the App is hosted.</p>
+
+  <p class="meta">This document describes our practices in good faith. It is not a substitute for legal advice. If you operate in a jurisdiction with specific privacy law requirements (GDPR, CCPA, PIPEDA, etc.) and need a more formal version, contact the developer.</p>
+</div>
+</body>
+</html>
